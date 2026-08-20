@@ -1,6 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
-
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+from app.core.database import get_db
+from app.api.endpoints import user
 # Uygulama örneğini oluşturuyoruz
 app = FastAPI(
     title="ARKANDA API",
@@ -29,3 +32,5 @@ async def health_check():
         "status": "ok",
         "service": "ARKANDA"
     }
+
+app.include_router(user.router, prefix="/api/users", tags=["Users"])
