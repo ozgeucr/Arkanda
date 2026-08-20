@@ -13,7 +13,7 @@ Kullanıcı konuşma sırasında sürekli düzeltilmez. Konuşma doğal şekilde
 
 ##  How It Works
 
-** Talk →  Natural Conversation →  End Session →  AI Analysis →  Personalized Feedback**
+**Talk →  Natural Conversation →  End Session →  AI Analysis →  Personalized Feedback**
 
 ###  During the Conversation
 
