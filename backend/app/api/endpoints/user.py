@@ -4,6 +4,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.schemas.user import UserCreate, UserResponse
 from app.core.security import get_password_hash
+from app.api.deps import get_current_user
 
 # Router nesnemizi oluşturuyoruz
 router = APIRouter()
@@ -36,3 +37,13 @@ async def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
     
     # 5. Yeni kullanıcıyı döndür (Şifre gizlenerek UserResponse şemasına göre dönecek)
     return new_user
+
+@router.get("/me")
+def get_my_profile(current_user: User = Depends(get_current_user)):
+    """Giriş yapmış kullanıcının profil bilgilerini döndürür."""
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "first_name": current_user.first_name,
+        "message": f"Merhaba {current_user.first_name}, güvenli bölgedesin! 🧡"
+    }

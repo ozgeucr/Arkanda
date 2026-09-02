@@ -3,8 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.core.database import get_db
-from app.api.endpoints import user
-# Uygulama örneğini oluşturuyoruz
+from app.api.endpoints import user, auth, chat
+
 app = FastAPI(
     title="ARKANDA API",
     description="AI English Tutor Backend System",
@@ -34,3 +34,5 @@ async def health_check():
     }
 
 app.include_router(user.router, prefix="/api/users", tags=["Users"])
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])

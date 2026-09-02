@@ -3,6 +3,8 @@ from sqlalchemy import Column, String, Boolean, DateTime, JSON
 from sqlalchemy.dialects.postgresql import UUID # PostgreSQL'e özel UUID veri tipi
 from sqlalchemy.sql import func
 from app.core.database import Base
+from sqlalchemy.orm import relationship
+
 
 class User(Base):
     __tablename__ = "users"
@@ -11,6 +13,7 @@ class User(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
+    conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
 
     # Profile
     first_name = Column(String, nullable=True)
@@ -43,3 +46,19 @@ class User(Base):
         onupdate=func.now(),
     )
     last_login = Column(DateTime(timezone=True), nullable=True)
+
+    memories = relationship(
+        "Memory",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+    interests = relationship(
+        "UserInterest",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+    important_topics = relationship(
+        "ImportantTopic",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
