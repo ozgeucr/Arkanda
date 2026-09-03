@@ -2,124 +2,234 @@ import json
 
 from google import genai
 from google.genai import types
+from pydantic import BaseModel, field_validator
+from typing import List
 
 from app.core.config import settings
+from app.services.ai_router import ai_router
 
+# --- PYDANTIC ŞEMALARI (Skorları Normalleştirmek İçin) ---
+class MemoryItem(BaseModel):
+    memory_type: str
+    key: str
+    value: str
+    importance_score: float = 0.0
+
+    @field_validator("importance_score", mode="before")
+    @classmethod
+    def normalize_score(cls, v):
+        if v > 1.0: return min(v / 10.0, 1.0)
+        return max(0.0, min(float(v), 1.0))
+
+class InterestItem(BaseModel):
+    topic: str
+    interest_level: float = 0.0
+
+    @field_validator("interest_level", mode="before")
+    @classmethod
+    def normalize_score(cls, v):
+        if v > 1.0: return min(v / 10.0, 1.0)
+        return max(0.0, min(float(v), 1.0))
+
+class TopicItem(BaseModel):
+    topic: str
+    importance_level: float = 0.0
+
+    @field_validator("importance_level", mode="before")
+    @classmethod
+    def normalize_score(cls, v):
+        if v > 1.0: return min(v / 10.0, 1.0)
+        return max(0.0, min(float(v), 1.0))
+
+class AIAnalysisResult(BaseModel):
+    importance_score: float = 0.0
+    memories: List[MemoryItem] = []
+    interests: List[InterestItem] = []
+    important_topics: List[TopicItem] = []
+
+    @field_validator("importance_score", mode="before")
+    @classmethod
+    def normalize_score(cls, v):
+        if v > 1.0: return min(v / 10.0, 1.0)
+        return max(0.0, min(float(v), 1.0))
+# ---------------------------------------------------------
 
 def analyze_user_message(user_input: str) -> dict:
     """
-    Kullanıcının mesajını analiz eder.
+    Kullanıcının mesajını uzun dönem hafıza sistemi için analiz eder.
 
-    Gemini'den:
-    - Message importance score
-    - Memories
-    - User interests
-    - Important topics
+    Groq:
+    - importance_score
+    - memories
+    - interests
+    - important_topics
 
-    bilgilerini JSON formatında döndürür.
+    bilgilerini JSON formatında üretir.
     """
 
-    if not settings.GEMINI_API_KEY:
-        return {
-            "importance_score": 0.0,
-            "memories": [],
-            "interests": [],
-            "important_topics": [],
-        }
+    if not user_input or not user_input.strip():
+        return AIAnalysisResult().model_dump()
 
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    try:
+        client = ai_router.get_groq()
 
-    analysis_prompt = f"""
-Analyze the following user message for a long-term AI companion memory system.
+        response = client.chat.completions.create(
+            model="openai/gpt-oss-20b",
 
-User message:
-"{user_input}"
+            messages=[
+                {
+                    "role": "system",
+                    "content": """
+You are the memory analysis engine of an AI companion application.
 
-Your task is to identify information that may be useful for future conversations.
+Your job is NOT to answer the user.
+
+Your only job is to analyze the user's message and extract
+information that can be useful for future conversations.
+
+Extract:
+
+1. importance_score
+2. memories
+3. interests
+4. important_topics
 
 Rules:
 
-1. importance_score:
-   - Score how important this message is for remembering the user.
-   - 0.0 = not useful for long-term context
-   - 1.0 = highly important personal information
-   - Personal preferences, strong opinions, important experiences and recurring interests
-     should receive higher scores.
-   - Casual greetings or temporary information should receive low scores.
-
-2. memories:
-   Extract durable personal information such as:
-   - preferences
-   - likes
-   - dislikes
-   - favorite things
-   - experiences
-   - opinions
-   - personal facts
-
-3. interests:
-   Identify topics the user appears interested in.
-   Examples:
-   - movies
-   - artificial intelligence
-   - football
-   - books
-   - programming
-
-4. important_topics:
-   Identify broader topics that seem important to the user.
-
-5. Never invent information.
-   Only extract information explicitly supported by the user's message.
-
-6. If there is nothing relevant, return empty arrays.
-
-Return ONLY valid JSON in exactly this structure:
-
-{{
-    "importance_score": 0.0,
-    "memories": [
-        {{
-            "memory_type": "preference",
-            "key": "favorite_movie",
-            "value": "Interstellar",
-            "importance_score": 0.95
-        }}
-    ],
-    "interests": [
-        {{
-            "topic": "sci-fi movies",
-            "interest_level": 0.95
-        }}
-    ],
-    "important_topics": [
-        {{
-            "topic": "movies",
-            "importance_level": 0.80
-        }}
-    ]
-}}
+- Never invent information.
+- Only extract information explicitly supported by the user's message.
+- Casual greetings should have a very low importance score.
+- Temporary information should normally not be stored as long-term memory.
+- Strong preferences should have a high importance score.
+- Strong likes and dislikes should have a high importance score.
+- Personal experiences may be stored if they could matter in future conversations.
+- Opinions may be stored if they reveal a stable preference.
+- Interests should represent topics the user genuinely appears interested in.
+- Important topics should represent broader subjects that may matter over time.
+- Keep extracted values concise.
+- Do not extract information about the AI itself.
 """
+                },
+                {
+                    "role": "user",
+                    "content": user_input
+                }
+            ],
 
-    try:
-        response = client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=analysis_prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.1,
-                response_mime_type="application/json",
-            ),
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "arkanda_memory_analysis",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+
+                        "properties": {
+                            "importance_score": {
+                                "type": "number"
+                            },
+
+                            "memories": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "memory_type": {
+                                            "type": "string"
+                                        },
+                                        "key": {
+                                            "type": "string"
+                                        },
+                                        "value": {
+                                            "type": "string"
+                                        },
+                                        "importance_score": {
+                                            "type": "number"
+                                        }
+                                    },
+                                    "required": [
+                                        "memory_type",
+                                        "key",
+                                        "value",
+                                        "importance_score"
+                                    ],
+                                    "additionalProperties": False
+                                }
+                            },
+
+                            "interests": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "topic": {
+                                            "type": "string"
+                                        },
+                                        "interest_level": {
+                                            "type": "number"
+                                        }
+                                    },
+                                    "required": [
+                                        "topic",
+                                        "interest_level"
+                                    ],
+                                    "additionalProperties": False
+                                }
+                            },
+
+                            "important_topics": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "topic": {
+                                            "type": "string"
+                                        },
+                                        "importance_level": {
+                                            "type": "number"
+                                        }
+                                    },
+                                    "required": [
+                                        "topic",
+                                        "importance_level"
+                                    ],
+                                    "additionalProperties": False
+                                }
+                            }
+                        },
+
+                        "required": [
+                            "importance_score",
+                            "memories",
+                            "interests",
+                            "important_topics"
+                        ],
+
+                        "additionalProperties": False
+                    }
+                }
+            },
+
+            temperature=0.1,
+            max_tokens=1000
         )
 
-        result = json.loads(response.text)
+        content = response.choices[0].message.content
 
-        return result
+        if not content:
+            raise ValueError("Groq returned an empty response.")
 
-    except Exception:
-        print(f"Memory Analysis Error: {str(e)}")
-        return {
-            "importance_score": 0.0,
-            "memories": [],
-            "interests": [],
-            "important_topics": [],
-        }
+        # JSON'ı Python sözlüğüne çevir
+        raw_data = json.loads(content)
+        
+        # Sözlüğü Pydantic modelinden geçir (8.5 gibi hatalı skorlar burada 0.85'e dönüşür)
+        validated_data = AIAnalysisResult(**raw_data)
+        
+        # Temizlenmiş ve doğrulanmış veriyi dict olarak döndür
+        return validated_data.model_dump()
+
+    except Exception as e:
+
+        print(f"Message analysis error: {e}")
+
+        return AIAnalysisResult().model_dump()
