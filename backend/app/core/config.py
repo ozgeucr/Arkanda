@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     GEMINI_API_KEY: str
+    GROQ_API_KEY: str = ""
 
     model_config = SettingsConfigDict(env_file="../.env", extra="ignore")
 
